@@ -53,12 +53,13 @@ class SSEEngine {
     return function vu(initialContext, vuDone) {
       const steps = [];
       for (const step of spec.flow) {
-        if (step === 'open') {
+        if (step === 'open' || step.open !== undefined) {
 
           steps.push(function open(next) {
-            // TODO: need to wait for state here / handle connection error, e.g. with invalid URL
+            const rawUrl = (step.open && step.open.url) || self.target;
+            const url = self.helpers.template(rawUrl, initialContext);
             const fetchOption = self._buildFetchOption();
-            const es = new EventSource(self.target, fetchOption);
+            const es = new EventSource(url, fetchOption);
             es.addEventListener('error', (err) => {
               if (err.code) {
                 events.emit('counter', `sse.error.${err.code}`, 1)
