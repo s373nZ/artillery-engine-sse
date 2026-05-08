@@ -7,7 +7,9 @@ config:
       arrivalRate: 1
   engines:
     sse: {}
-      # withCredentials: false
+      # headers:
+      #   Authorization: "Bearer my-token"
+      # http2: true
 scenarios:
   - engine: sse
     onMessage: handleSSEMessage

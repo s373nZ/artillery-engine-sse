@@ -1,4 +1,4 @@
-const EventSource = require('eventsource');
+const { EventSource } = require('eventsource');
 const A = require('async');
 
 class SSEEngine {
@@ -13,6 +13,40 @@ class SSEEngine {
     return this;
   }
 
+  _buildFetchOption() {
+    const config = this.eventSourceConfig;
+    const customHeaders = config.headers || {};
+    const useHttp2 = config.http2 === true;
+    const rejectUnauthorized = config.https?.rejectUnauthorized;
+
+    const hasCustomHeaders = Object.keys(customHeaders).length > 0;
+    const needsCustomFetch = hasCustomHeaders || useHttp2 || rejectUnauthorized !== undefined;
+
+    if (!needsCustomFetch) {
+      return {};
+    }
+
+    let dispatcher;
+    if (useHttp2 || rejectUnauthorized !== undefined) {
+      const { Agent } = require('undici');
+      dispatcher = new Agent({
+        allowH2: useHttp2,
+        ...(rejectUnauthorized !== undefined ? { connect: { rejectUnauthorized } } : {}),
+      });
+    }
+
+    return {
+      fetch: (input, init) => {
+        const fetchFn = dispatcher ? require('undici').fetch : globalThis.fetch;
+        return fetchFn(input, {
+          ...init,
+          ...(hasCustomHeaders ? { headers: { ...init.headers, ...customHeaders } } : {}),
+          ...(dispatcher ? { dispatcher } : {}),
+        });
+      },
+    };
+  }
+
   createScenario(spec, events) {
     const self = this;
 
@@ -23,23 +57,24 @@ class SSEEngine {
 
           steps.push(function open(next) {
             // TODO: need to wait for state here / handle connection error, e.g. with invalid URL
-            const es = new EventSource(self.target, self.eventSourceConfig);
-            es.on('error', (err) => {
-              if (err.status) {
-                events.emit('counter', `sse.error.${err.status}`, 1)
+            const fetchOption = self._buildFetchOption();
+            const es = new EventSource(self.target, fetchOption);
+            es.addEventListener('error', (err) => {
+              if (err.code) {
+                events.emit('counter', `sse.error.${err.code}`, 1)
               } else {
                 events.emit('counter', 'sse.error', 1);
               }
             });
 
-            es.on('message', (_msg) => {
+            es.addEventListener('message', (_msg) => {
               events.emit('counter', 'sse.message', 1);
             });
 
             if (spec.onMessage) {
               // TODO: Warn if no processor function
               if (self.script.config.processor?.[spec.onMessage]) {
-                es.on('message', (msg) => {
+                es.addEventListener('message', (msg) => {
                   self.script.config.processor[spec.onMessage].call(null, msg, initialContext, events);
                 });
               }
@@ -49,14 +84,14 @@ class SSEEngine {
               for(const handlerSpec of spec.onEvent) {
                 // TODO: Warn if no processor function
                 if (self.script.config.processor?.[handlerSpec.handler]) {
-                  es.on(handlerSpec.eventName, (e) => {
+                  es.addEventListener(handlerSpec.eventName, (e) => {
                     self.script.config.processor[handlerSpec.handler].call(null, e, initialContext, events);
                   });
                 }
               }
             }
 
-            es.on('open', () => {
+            es.addEventListener('open', () => {
               events.emit('counter', 'sse.open', 1);
             });
             initialContext.es = es;

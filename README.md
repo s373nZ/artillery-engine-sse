@@ -8,6 +8,10 @@ This engine adds support for load testing [Server-Sent Events](https://developer
 
 - Open, hold and close connections to SSE-based URLs
 - Set up custom event and message handlers
+- HTTP/2 support via custom fetch dispatcher
+- Custom headers support
+
+Requires Node.js >= 20.
 
 See [`test.yml`](./test.yml) for an example test script.
 
@@ -21,6 +25,26 @@ See [`test.yml`](./test.yml) for an example test script.
     ```
 
 Artillery will be able to load the engine and test SSE endpoints now.
+
+## Engine configuration
+
+Configure the engine in your Artillery script under `config.engines.sse`:
+
+```yaml
+config:
+  engines:
+    sse:
+      # Custom headers (optional)
+      headers:
+        Authorization: "Bearer my-token"
+      # Enable HTTP/2 negotiation (optional, requires undici)
+      http2: true
+      # Custom TLS settings (optional)
+      https:
+        rejectUnauthorized: false
+```
+
+HTTP/2 support requires the `undici` package: `npm install undici`.
 
 Run the bundled example ([`test.yml`](./test.yml))
 
