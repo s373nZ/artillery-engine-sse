@@ -14,7 +14,7 @@ class SSEEngine {
   }
 
   _buildFetchOption() {
-    const config = this.eventSourceConfig;
+    const config = this._migrateV2Config(this.eventSourceConfig);
     const customHeaders = config.headers || {};
     const useHttp2 = config.http2 === true;
     const rejectUnauthorized = config.https?.rejectUnauthorized;
@@ -45,6 +45,34 @@ class SSEEngine {
         });
       },
     };
+  }
+
+  _migrateV2Config(config) {
+    const migrated = { ...config };
+    const warn = (old, replacement) => {
+      console.warn(`artillery-engine-sse: '${old}' is deprecated. Use '${replacement}' instead.`);
+    };
+
+    // v2 withCredentials → fetch credentials option
+    if (migrated.withCredentials !== undefined) {
+      warn('withCredentials', 'headers');
+      delete migrated.withCredentials;
+    }
+
+    // v2 top-level rejectUnauthorized → https.rejectUnauthorized
+    if (migrated.rejectUnauthorized !== undefined) {
+      warn('rejectUnauthorized', 'https.rejectUnauthorized');
+      migrated.https = { ...migrated.https, rejectUnauthorized: migrated.rejectUnauthorized };
+      delete migrated.rejectUnauthorized;
+    }
+
+    // v2 proxy → not yet supported in v4 engine
+    if (migrated.proxy !== undefined) {
+      warn('proxy', 'a custom fetch function');
+      delete migrated.proxy;
+    }
+
+    return migrated;
   }
 
   createScenario(spec, events) {
